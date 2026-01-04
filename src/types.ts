@@ -30,6 +30,16 @@ export type Session = {
   created_at: string;
 };
 
+export type Comment = {
+  id: number;
+  todo_id: number;
+  user_id: number;
+  content: string;
+  created_at: string;
+  username?: string;
+  avatar_url?: string | null;
+};
+
 export type Variables = {
   user: User | null;
   session: Session | null;
