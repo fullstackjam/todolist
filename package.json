@@ -1,0 +1,20 @@
+{
+  "name": "todolist",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate": "wrangler d1 execute todolist-db --local --file=./schema.sql",
+    "db:migrate:prod": "wrangler d1 execute todolist-db --remote --file=./schema.sql"
+  },
+  "dependencies": {
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241205.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^3.99.0"
+  }
+}
