@@ -624,26 +624,30 @@ function getStyles(): string {
     .chart-bar-fill { height: 20px; border-radius: 4px; transition: width 0.3s; }
     .chart-bar-value { font-size: 0.75rem; color: #666; }
     
-    .gantt-view { display: flex; flex-direction: column; gap: 1rem; }
+    .gantt-view { display: flex; flex-direction: column; gap: 1.5rem; }
     .gantt-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
-    .gantt-legend { display: flex; gap: 0.75rem; font-size: 0.85rem; color: #555; }
-    .legend-item { display: flex; align-items: center; gap: 0.35rem; }
-    .legend-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
-    .status-todo { background: #9ca3af; }
-    .status-doing { background: #f59e0b; }
-    .status-done { background: #10b981; }
-    #gantt-container { background: white; border-radius: 8px; padding: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); min-height: 320px; }
-    .gantt-axis { display: flex; justify-content: space-between; font-size: 0.85rem; color: #666; margin-bottom: 0.5rem; }
-    .gantt-rows { display: flex; flex-direction: column; gap: 1rem; }
-    .gantt-row { display: grid; grid-template-columns: 180px 1fr; gap: 0.75rem; align-items: flex-start; }
-    .gantt-row-label { font-weight: 600; color: #333; display: flex; align-items: center; gap: 0.5rem; }
-    .gantt-row-bars { position: relative; background: #f5f7fa; border: 1px solid #e5e7eb; border-radius: 8px; height: 56px; overflow: hidden; }
-    .gantt-bar { position: absolute; top: 8px; height: 40px; border-radius: 6px; padding: 6px 10px; color: #fff; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 2px 6px rgba(0,0,0,0.12); }
-    .gantt-bar.status-todo { background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%); }
-    .gantt-bar.status-doing { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
-    .gantt-bar.status-done { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
-    .gantt-bar-title { font-size: 0.85rem; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .gantt-bar-dates { font-size: 0.75rem; opacity: 0.9; }
+    .gantt-legend { display: flex; gap: 1rem; font-size: 0.8rem; color: #64748b; font-weight: 500; }
+    .legend-item { display: flex; align-items: center; gap: 0.4rem; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+    .status-todo { background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%); }
+    .status-doing { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); }
+    .status-done { background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); }
+    #gantt-container { background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); border-radius: 16px; padding: 1.5rem; box-shadow: 0 4px 20px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04); min-height: 360px; border: 1px solid #e2e8f0; }
+    .gantt-axis { display: flex; font-size: 0.7rem; color: #94a3b8; padding: 0.75rem 0; border-bottom: 2px solid #e2e8f0; margin-bottom: 1rem; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; background: linear-gradient(90deg, transparent 0%, #f1f5f9 50%, transparent 100%); border-radius: 4px; justify-content: center; gap: 1rem; flex-wrap: wrap; }
+    .gantt-rows { display: flex; flex-direction: column; gap: 0; }
+    .gantt-row { display: grid; grid-template-columns: 140px 1fr; gap: 1rem; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid #f1f5f9; transition: background-color 0.2s ease; }
+    .gantt-row:hover { background: linear-gradient(90deg, #f8fafc 0%, transparent 30%); }
+    .gantt-row:last-child { border-bottom: none; }
+    .gantt-row-label { font-weight: 600; color: #334155; display: flex; align-items: center; gap: 0.6rem; font-size: 0.875rem; }
+    .gantt-row-label .tag-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+    .gantt-row-bars { position: relative; background: linear-gradient(90deg, #f8fafc 0%, #f1f5f9 50%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; height: 52px; overflow: visible; box-shadow: inset 0 1px 2px rgba(0,0,0,0.03); }
+    .gantt-bar { position: absolute; top: 6px; height: 40px; border-radius: 20px; padding: 6px 14px; color: #fff; display: flex; flex-direction: column; justify-content: center; gap: 2px; box-shadow: 0 2px 8px rgba(0,0,0,0.15), 0 1px 2px rgba(0,0,0,0.1); cursor: pointer; transition: all 0.2s ease; transform-origin: left center; z-index: 1; }
+    .gantt-bar:hover { transform: scale(1.03) translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.1); z-index: 10; }
+    .gantt-bar.status-todo { background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%); }
+    .gantt-bar.status-doing { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); }
+    .gantt-bar.status-done { background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); }
+    .gantt-bar-title { font-size: 0.8rem; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+    .gantt-bar-dates { font-size: 0.65rem; opacity: 0.9; font-weight: 500; letter-spacing: 0.01em; }
     
     .btn { padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 500; background: #f0f0f0; color: #333; transition: all 0.2s; text-decoration: none; display: inline-block; }
     .btn:hover { background: #e0e0e0; }
@@ -793,16 +797,41 @@ function getScript(): string {
       ['todo', 'doing', 'done'].forEach(status => {
         const container = document.getElementById('kanban-' + status);
         if (!container) return;
-        
+
         const statusTodos = todos.filter(t => t.status === status);
-        container.innerHTML = statusTodos.map(todo => `
-          <div class="kanban-card" draggable="true" ondragstart="drag(event)" data-id="${todo.id}">
-            <div class="todo-card-title ${todo.completed ? 'completed' : ''}">${esc(todo.title)}</div>
-            ${todo.tags.length ? '<div class="todo-card-meta">' + todo.tags.map(t => '<span class="tag-badge" style="background:' + t.color + '">' + esc(t.name) + '</span>').join('') + '</div>' : ''}
-            ${todo.progress > 0 ? '<div class="progress-bar"><div class="progress-fill" style="width:' + todo.progress + '%"></div></div>' : ''}
-          </div>
-        `).join('') || '<div class="empty-state" style="padding:1rem;font-size:0.875rem;">Drop tasks here</div>';
+        const cards = statusTodos.map(todo => {
+          const tagsHtml = todo.tags.length
+            ? '<div class="todo-card-meta">' + todo.tags.map(t => '<span class="tag-badge" style="background:' + t.color + '">' + esc(t.name) + '</span>').join('') + '</div>'
+            : '';
+          const progressHtml = todo.progress > 0
+            ? '<div class="progress-bar"><div class="progress-fill" style="width:' + todo.progress + '%"></div></div>'
+            : '';
+          return (
+            '<div class="kanban-card" draggable="true" ondragstart="drag(event)" data-id="' + todo.id + '">' +
+            '<div class="todo-card-title ' + (todo.completed ? 'completed' : '') + '">' + esc(todo.title) + '</div>' +
+            tagsHtml +
+            progressHtml +
+            '</div>'
+          );
+        }).join('');
+        container.innerHTML = cards || '<div class="empty-state" style="padding:1rem;font-size:0.875rem;">Drop tasks here</div>';
       });
+    }
+
+
+
+
+
+    function formatAxisDate(d) {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return months[d.getMonth()] + ' ' + d.getDate();
+    }
+
+    function formatDateRange(start, end) {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const startStr = months[start.getMonth()] + ' ' + start.getDate();
+      const endStr = months[end.getMonth()] + ' ' + end.getDate();
+      return startStr === endStr ? startStr : startStr + ' - ' + endStr;
     }
 
     function renderGantt() {
@@ -848,26 +877,21 @@ function getScript(): string {
             const endMs = Math.max(startMs + DAY, Math.min(maxEnd.getTime(), todo.end.getTime()));
             const left = ((startMs - minStart.getTime()) / totalMs) * 100;
             const width = Math.max(2, ((endMs - startMs) / totalMs) * 100);
-            return `
-              <div class="gantt-bar status-${todo.status}" style="left:${left}%;width:${width}%" title="${esc(todo.title)}">
-                <div class="gantt-bar-title">${esc(todo.title)}</div>
-                <div class="gantt-bar-dates">${formatDateRange(new Date(startMs), new Date(endMs))}</div>
-              </div>
-            `;
+            return '<div class="gantt-bar status-' + todo.status + '" style="left:' + left + '%;width:' + width + '%" title="' + esc(todo.title) + '">' +
+              '<div class="gantt-bar-title">' + esc(todo.title) + '</div>' +
+              '<div class="gantt-bar-dates">' + formatDateRange(new Date(startMs), new Date(endMs)) + '</div>' +
+              '</div>';
           }).join('');
 
-        return `
-          <div class="gantt-row">
-            <div class="gantt-row-label"><span class="tag-dot" style="background:${group.tag.color}"></span><span>${esc(group.tag.name)}</span></div>
-            <div class="gantt-row-bars">${bars || '<div class="empty-state" style="padding:1rem;">No tasks</div>'}</div>
-          </div>
-        `;
+        const barsContent = bars || '<div class="empty-state" style="padding:1rem;">No tasks</div>';
+        return '<div class="gantt-row">' +
+          '<div class="gantt-row-label"><span class="tag-dot" style="background:' + group.tag.color + '"></span><span>' + esc(group.tag.name) + '</span></div>' +
+          '<div class="gantt-row-bars">' + barsContent + '</div>' +
+          '</div>';
       }).join('');
 
-      container.innerHTML = `
-        <div class="gantt-axis">${axisLabels.join(' | ')}</div>
-        <div class="gantt-rows">${rowsHtml}</div>
-      `;
+      container.innerHTML = '<div class="gantt-axis">' + axisLabels.join(' | ') + '</div>' +
+        '<div class="gantt-rows">' + rowsHtml + '</div>';
     }
 
     function renderTodoCard(todo) {
