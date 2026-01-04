@@ -1,4 +1,4 @@
-import type { Todo, TodoWithTags, Tag, Subtask, Comment, DailyStats, TodoFilter } from "./types";
+import type { Todo, TodoWithTags, Tag, Subtask, Comment, DailyStats, SummaryReport, SummaryReportDay, TodoFilter } from "./types";
 
 export async function getTodos(
   db: D1Database,
@@ -461,6 +461,160 @@ export async function getStats(db: D1Database, userId: number): Promise<{
     byPriority: byPriority || [],
     byStatus: byStatus || [],
     recentDays: recentDays || [],
+  };
+}
+
+function isIsoDateOnly(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function addDaysIsoDateOnly(isoDate: string, days: number): string {
+  const base = new Date(`${isoDate}T00:00:00.000Z`);
+  const next = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
+  return next.toISOString().split("T")[0];
+}
+
+function clampDays(value: number): number {
+  if (!Number.isFinite(value)) return 7;
+  return Math.min(365, Math.max(1, Math.trunc(value)));
+}
+
+export async function getSummaryReport(
+  db: D1Database,
+  userId: number,
+  options: { days?: number; start?: string; end?: string } = {}
+): Promise<SummaryReport> {
+  const today = new Date().toISOString().split("T")[0];
+
+  const end = options.end && isIsoDateOnly(options.end) ? options.end : today;
+  const days = clampDays(options.days ?? 7);
+
+  const start =
+    options.start && isIsoDateOnly(options.start)
+      ? options.start
+      : addDaysIsoDateOnly(end, -(days - 1));
+
+  const dateList: string[] = [];
+  for (let d = start; d <= end; d = addDaysIsoDateOnly(d, 1)) {
+    dateList.push(d);
+  }
+
+  const createdTotalRow = await db
+    .prepare("SELECT COUNT(*) as count FROM todos WHERE user_id = ? AND date(created_at) BETWEEN ? AND ?")
+    .bind(userId, start, end)
+    .first<{ count: number }>();
+
+  const completedTotalRow = await db
+    .prepare(
+      "SELECT COUNT(*) as count FROM todos WHERE user_id = ? AND completed = 1 AND completed_at IS NOT NULL AND date(completed_at) BETWEEN ? AND ?"
+    )
+    .bind(userId, start, end)
+    .first<{ count: number }>();
+
+  const actualTotalsRow = await db
+    .prepare(
+      "SELECT COUNT(actual_minutes) as samples, AVG(actual_minutes) as avg, SUM(actual_minutes) as total FROM todos WHERE user_id = ? AND completed = 1 AND actual_minutes IS NOT NULL AND completed_at IS NOT NULL AND date(completed_at) BETWEEN ? AND ?"
+    )
+    .bind(userId, start, end)
+    .first<{ samples: number; avg: number; total: number }>();
+
+  const estimatedTotalsRow = await db
+    .prepare(
+      "SELECT COUNT(estimated_minutes) as samples, AVG(estimated_minutes) as avg, SUM(estimated_minutes) as total FROM todos WHERE user_id = ? AND completed = 1 AND estimated_minutes IS NOT NULL AND completed_at IS NOT NULL AND date(completed_at) BETWEEN ? AND ?"
+    )
+    .bind(userId, start, end)
+    .first<{ samples: number; avg: number; total: number }>();
+
+  const { results: createdByDayRows } = await db
+    .prepare(
+      "SELECT date(created_at) as date, COUNT(*) as count FROM todos WHERE user_id = ? AND date(created_at) BETWEEN ? AND ? GROUP BY date(created_at)"
+    )
+    .bind(userId, start, end)
+    .all<{ date: string; count: number }>();
+
+  const { results: completedByDayRows } = await db
+    .prepare(
+      "SELECT date(completed_at) as date, COUNT(*) as count FROM todos WHERE user_id = ? AND completed = 1 AND completed_at IS NOT NULL AND date(completed_at) BETWEEN ? AND ? GROUP BY date(completed_at)"
+    )
+    .bind(userId, start, end)
+    .all<{ date: string; count: number }>();
+
+  const { results: actualByDayRows } = await db
+    .prepare(
+      "SELECT date(completed_at) as date, COUNT(actual_minutes) as samples, AVG(actual_minutes) as avg, SUM(actual_minutes) as total FROM todos WHERE user_id = ? AND completed = 1 AND actual_minutes IS NOT NULL AND completed_at IS NOT NULL AND date(completed_at) BETWEEN ? AND ? GROUP BY date(completed_at)"
+    )
+    .bind(userId, start, end)
+    .all<{ date: string; samples: number; avg: number; total: number }>();
+
+  const { results: estimatedByDayRows } = await db
+    .prepare(
+      "SELECT date(completed_at) as date, COUNT(estimated_minutes) as samples, AVG(estimated_minutes) as avg, SUM(estimated_minutes) as total FROM todos WHERE user_id = ? AND completed = 1 AND estimated_minutes IS NOT NULL AND completed_at IS NOT NULL AND date(completed_at) BETWEEN ? AND ? GROUP BY date(completed_at)"
+    )
+    .bind(userId, start, end)
+    .all<{ date: string; samples: number; avg: number; total: number }>();
+
+  const createdByDay = new Map<string, number>();
+  for (const row of createdByDayRows || []) {
+    createdByDay.set(row.date, Number(row.count) || 0);
+  }
+
+  const completedByDay = new Map<string, number>();
+  for (const row of completedByDayRows || []) {
+    completedByDay.set(row.date, Number(row.count) || 0);
+  }
+
+  const actualByDay = new Map<string, { samples: number; avg: number; total: number }>();
+  for (const row of actualByDayRows || []) {
+    actualByDay.set(row.date, {
+      samples: Number(row.samples) || 0,
+      avg: Number(row.avg) || 0,
+      total: Number(row.total) || 0,
+    });
+  }
+
+  const estimatedByDay = new Map<string, { samples: number; avg: number; total: number }>();
+  for (const row of estimatedByDayRows || []) {
+    estimatedByDay.set(row.date, {
+      samples: Number(row.samples) || 0,
+      avg: Number(row.avg) || 0,
+      total: Number(row.total) || 0,
+    });
+  }
+
+  const perDay: SummaryReportDay[] = dateList.map((date) => {
+    const actual = actualByDay.get(date);
+    const estimate = estimatedByDay.get(date);
+
+    return {
+      date,
+      createdCount: createdByDay.get(date) || 0,
+      completedCount: completedByDay.get(date) || 0,
+      totalActualMinutes: actual?.total ? Math.round(actual.total) : 0,
+      avgActualMinutes: actual?.avg ? Math.round(actual.avg) : 0,
+      actualMinutesSampleCount: actual?.samples || 0,
+      totalEstimatedMinutes: estimate?.total ? Math.round(estimate.total) : 0,
+      avgEstimatedMinutes: estimate?.avg ? Math.round(estimate.avg) : 0,
+      estimatedMinutesSampleCount: estimate?.samples || 0,
+    };
+  });
+
+  return {
+    range: {
+      start,
+      end,
+      days: dateList.length,
+    },
+    totals: {
+      createdCount: Number(createdTotalRow?.count) || 0,
+      completedCount: Number(completedTotalRow?.count) || 0,
+      totalActualMinutes: Math.round(Number(actualTotalsRow?.total) || 0),
+      avgActualMinutes: Math.round(Number(actualTotalsRow?.avg) || 0),
+      actualMinutesSampleCount: Number(actualTotalsRow?.samples) || 0,
+      totalEstimatedMinutes: Math.round(Number(estimatedTotalsRow?.total) || 0),
+      avgEstimatedMinutes: Math.round(Number(estimatedTotalsRow?.avg) || 0),
+      estimatedMinutesSampleCount: Number(estimatedTotalsRow?.samples) || 0,
+    },
+    perDay,
   };
 }
 

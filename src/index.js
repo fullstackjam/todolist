@@ -1,318 +1,262 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import type { Bindings, Variables, User, Todo, TodoWithTags, Tag, Subtask } from "./types";
-import {
-  authMiddleware,
-  getGitHubAuthUrl,
-  exchangeCodeForToken,
-  getGitHubUser,
-  findOrCreateUser,
-  createSession,
-  deleteSession,
-  setSessionCookie,
-  clearSessionCookie,
-} from "./auth";
-import {
-  getTodos, getTodoById, createTodo, updateTodo, deleteTodo,
-  getTags, createTag, deleteTag,
-  getSubtasks, createSubtask, updateSubtask, deleteSubtask,
-  getComments, createComment, deleteComment,
-  shareTodo, unshareTodo, getTodoByShareToken,
-  getStats, getSummaryReport, processRepeatTasks
-} from "./db";
-
-const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
-
+import { authMiddleware, getGitHubAuthUrl, exchangeCodeForToken, getGitHubUser, findOrCreateUser, createSession, deleteSession, setSessionCookie, clearSessionCookie, } from "./auth";
+import { getTodos, createTodo, updateTodo, deleteTodo, getTags, createTag, deleteTag, getSubtasks, createSubtask, updateSubtask, deleteSubtask, getComments, createComment, deleteComment, shareTodo, unshareTodo, getTodoByShareToken, getStats, getSummaryReport, processRepeatTasks } from "./db";
+const app = new Hono();
 app.use("*", cors());
 app.use("*", authMiddleware);
-
 app.get("/", async (c) => {
-  const user = c.get("user");
-  if (user) {
-    await processRepeatTasks(c.env.DB, user.id);
-  }
-  const view = c.req.query("view") || "list";
-  return c.html(renderPage(user, view, c.env.APP_URL));
+    const user = c.get("user");
+    if (user) {
+        await processRepeatTasks(c.env.DB, user.id);
+    }
+    const view = c.req.query("view") || "list";
+    return c.html(renderPage(user, view, c.env.APP_URL));
 });
-
 app.get("/auth/github", (c) => {
-  const redirectUri = `${c.env.APP_URL}/auth/github/callback`;
-  const authUrl = getGitHubAuthUrl(c.env.GITHUB_CLIENT_ID, redirectUri);
-  return c.redirect(authUrl);
+    const redirectUri = `${c.env.APP_URL}/auth/github/callback`;
+    const authUrl = getGitHubAuthUrl(c.env.GITHUB_CLIENT_ID, redirectUri);
+    return c.redirect(authUrl);
 });
-
 app.get("/auth/github/callback", async (c) => {
-  const code = c.req.query("code");
-  if (!code) return c.redirect("/?error=no_code");
-
-  const accessToken = await exchangeCodeForToken(c.env.GITHUB_CLIENT_ID, c.env.GITHUB_CLIENT_SECRET, code);
-  if (!accessToken) return c.redirect("/?error=token_failed");
-
-  const githubUser = await getGitHubUser(accessToken);
-  if (!githubUser) return c.redirect("/?error=user_failed");
-
-  const user = await findOrCreateUser(c.env.DB, githubUser.id, githubUser.login, githubUser.avatar_url);
-  const sessionId = await createSession(c.env.DB, user.id);
-  setSessionCookie(c, sessionId);
-
-  return c.redirect("/");
+    const code = c.req.query("code");
+    if (!code)
+        return c.redirect("/?error=no_code");
+    const accessToken = await exchangeCodeForToken(c.env.GITHUB_CLIENT_ID, c.env.GITHUB_CLIENT_SECRET, code);
+    if (!accessToken)
+        return c.redirect("/?error=token_failed");
+    const githubUser = await getGitHubUser(accessToken);
+    if (!githubUser)
+        return c.redirect("/?error=user_failed");
+    const user = await findOrCreateUser(c.env.DB, githubUser.id, githubUser.login, githubUser.avatar_url);
+    const sessionId = await createSession(c.env.DB, user.id);
+    setSessionCookie(c, sessionId);
+    return c.redirect("/");
 });
-
 app.get("/auth/logout", async (c) => {
-  const session = c.get("session");
-  if (session) {
-    await deleteSession(c.env.DB, session.id);
-    clearSessionCookie(c);
-  }
-  return c.redirect("/");
+    const session = c.get("session");
+    if (session) {
+        await deleteSession(c.env.DB, session.id);
+        clearSessionCookie(c);
+    }
+    return c.redirect("/");
 });
-
 app.get("/api/todos", async (c) => {
-  const user = c.get("user");
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const filter = {
-    status: c.req.query("status"),
-    priority: c.req.query("priority") ? parseInt(c.req.query("priority")!) : undefined,
-    archived: c.req.query("archived") === "true",
-    tagId: c.req.query("tagId") ? parseInt(c.req.query("tagId")!) : undefined,
-    dueBefore: c.req.query("dueBefore"),
-    dueAfter: c.req.query("dueAfter"),
-    search: c.req.query("search"),
-  };
-
-  const todos = await getTodos(c.env.DB, user.id, filter);
-  return c.json(todos);
+    const user = c.get("user");
+    if (!user)
+        return c.json({ error: "Unauthorized" }, 401);
+    const filter = {
+        status: c.req.query("status"),
+        priority: c.req.query("priority") ? parseInt(c.req.query("priority")) : undefined,
+        archived: c.req.query("archived") === "true",
+        tagId: c.req.query("tagId") ? parseInt(c.req.query("tagId")) : undefined,
+        dueBefore: c.req.query("dueBefore"),
+        dueAfter: c.req.query("dueAfter"),
+        search: c.req.query("search"),
+    };
+    const todos = await getTodos(c.env.DB, user.id, filter);
+    return c.json(todos);
 });
-
 app.post("/api/todos", async (c) => {
-  const user = c.get("user");
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const body = await c.req.json();
-  if (!body.title?.trim()) return c.json({ error: "Title is required" }, 400);
-
-  const todo = await createTodo(c.env.DB, user.id, {
-    title: body.title.trim(),
-    description: body.description,
-    priority: body.priority,
-    due_date: body.due_date,
-    estimated_minutes: body.estimated_minutes,
-    repeat_type: body.repeat_type,
-    repeat_interval: body.repeat_interval,
-    tagIds: body.tagIds,
-  });
-
-  return c.json(todo, 201);
+    const user = c.get("user");
+    if (!user)
+        return c.json({ error: "Unauthorized" }, 401);
+    const body = await c.req.json();
+    if (!body.title?.trim())
+        return c.json({ error: "Title is required" }, 400);
+    const todo = await createTodo(c.env.DB, user.id, {
+        title: body.title.trim(),
+        description: body.description,
+        priority: body.priority,
+        due_date: body.due_date,
+        estimated_minutes: body.estimated_minutes,
+        repeat_type: body.repeat_type,
+        repeat_interval: body.repeat_interval,
+        tagIds: body.tagIds,
+    });
+    return c.json(todo, 201);
 });
-
 app.patch("/api/todos/:id", async (c) => {
-  const user = c.get("user");
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const todoId = parseInt(c.req.param("id"));
-  const body = await c.req.json();
-
-  const todo = await updateTodo(c.env.DB, user.id, todoId, body);
-  if (!todo) return c.json({ error: "Not found" }, 404);
-
-  return c.json(todo);
+    const user = c.get("user");
+    if (!user)
+        return c.json({ error: "Unauthorized" }, 401);
+    const todoId = parseInt(c.req.param("id"));
+    const body = await c.req.json();
+    const todo = await updateTodo(c.env.DB, user.id, todoId, body);
+    if (!todo)
+        return c.json({ error: "Not found" }, 404);
+    return c.json(todo);
 });
-
 app.delete("/api/todos/:id", async (c) => {
-  const user = c.get("user");
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const todoId = parseInt(c.req.param("id"));
-  const deleted = await deleteTodo(c.env.DB, user.id, todoId);
-  if (!deleted) return c.json({ error: "Not found" }, 404);
-
-  return c.json({ success: true });
+    const user = c.get("user");
+    if (!user)
+        return c.json({ error: "Unauthorized" }, 401);
+    const todoId = parseInt(c.req.param("id"));
+    const deleted = await deleteTodo(c.env.DB, user.id, todoId);
+    if (!deleted)
+        return c.json({ error: "Not found" }, 404);
+    return c.json({ success: true });
 });
-
 app.get("/api/tags", async (c) => {
-  const user = c.get("user");
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const tags = await getTags(c.env.DB, user.id);
-  return c.json(tags);
+    const user = c.get("user");
+    if (!user)
+        return c.json({ error: "Unauthorized" }, 401);
+    const tags = await getTags(c.env.DB, user.id);
+    return c.json(tags);
 });
-
 app.post("/api/tags", async (c) => {
-  const user = c.get("user");
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const body = await c.req.json();
-  if (!body.name?.trim()) return c.json({ error: "Name is required" }, 400);
-
-  const tag = await createTag(c.env.DB, user.id, body.name.trim(), body.color);
-  return c.json(tag, 201);
+    const user = c.get("user");
+    if (!user)
+        return c.json({ error: "Unauthorized" }, 401);
+    const body = await c.req.json();
+    if (!body.name?.trim())
+        return c.json({ error: "Name is required" }, 400);
+    const tag = await createTag(c.env.DB, user.id, body.name.trim(), body.color);
+    return c.json(tag, 201);
 });
-
 app.delete("/api/tags/:id", async (c) => {
-  const user = c.get("user");
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const tagId = parseInt(c.req.param("id"));
-  const deleted = await deleteTag(c.env.DB, user.id, tagId);
-  if (!deleted) return c.json({ error: "Not found" }, 404);
-
-  return c.json({ success: true });
+    const user = c.get("user");
+    if (!user)
+        return c.json({ error: "Unauthorized" }, 401);
+    const tagId = parseInt(c.req.param("id"));
+    const deleted = await deleteTag(c.env.DB, user.id, tagId);
+    if (!deleted)
+        return c.json({ error: "Not found" }, 404);
+    return c.json({ success: true });
 });
-
 app.get("/api/todos/:id/subtasks", async (c) => {
-  const user = c.get("user");
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const todoId = parseInt(c.req.param("id"));
-  const subtasks = await getSubtasks(c.env.DB, todoId);
-  return c.json(subtasks);
+    const user = c.get("user");
+    if (!user)
+        return c.json({ error: "Unauthorized" }, 401);
+    const todoId = parseInt(c.req.param("id"));
+    const subtasks = await getSubtasks(c.env.DB, todoId);
+    return c.json(subtasks);
 });
-
 app.post("/api/todos/:id/subtasks", async (c) => {
-  const user = c.get("user");
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const todoId = parseInt(c.req.param("id"));
-  const body = await c.req.json();
-  if (!body.title?.trim()) return c.json({ error: "Title is required" }, 400);
-
-  const subtask = await createSubtask(c.env.DB, todoId, body.title.trim());
-  return c.json(subtask, 201);
+    const user = c.get("user");
+    if (!user)
+        return c.json({ error: "Unauthorized" }, 401);
+    const todoId = parseInt(c.req.param("id"));
+    const body = await c.req.json();
+    if (!body.title?.trim())
+        return c.json({ error: "Title is required" }, 400);
+    const subtask = await createSubtask(c.env.DB, todoId, body.title.trim());
+    return c.json(subtask, 201);
 });
-
 app.patch("/api/subtasks/:id", async (c) => {
-  const user = c.get("user");
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const subtaskId = parseInt(c.req.param("id"));
-  const body = await c.req.json();
-
-  const subtask = await updateSubtask(c.env.DB, subtaskId, body);
-  if (!subtask) return c.json({ error: "Not found" }, 404);
-
-  return c.json(subtask);
+    const user = c.get("user");
+    if (!user)
+        return c.json({ error: "Unauthorized" }, 401);
+    const subtaskId = parseInt(c.req.param("id"));
+    const body = await c.req.json();
+    const subtask = await updateSubtask(c.env.DB, subtaskId, body);
+    if (!subtask)
+        return c.json({ error: "Not found" }, 404);
+    return c.json(subtask);
 });
-
 app.delete("/api/subtasks/:id", async (c) => {
-  const user = c.get("user");
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const subtaskId = parseInt(c.req.param("id"));
-  const deleted = await deleteSubtask(c.env.DB, subtaskId);
-  if (!deleted) return c.json({ error: "Not found" }, 404);
-
-  return c.json({ success: true });
+    const user = c.get("user");
+    if (!user)
+        return c.json({ error: "Unauthorized" }, 401);
+    const subtaskId = parseInt(c.req.param("id"));
+    const deleted = await deleteSubtask(c.env.DB, subtaskId);
+    if (!deleted)
+        return c.json({ error: "Not found" }, 404);
+    return c.json({ success: true });
 });
-
 app.get("/api/todos/:id/comments", async (c) => {
-  const user = c.get("user");
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const todoId = parseInt(c.req.param("id"));
-  const comments = await getComments(c.env.DB, todoId);
-  return c.json(comments);
+    const user = c.get("user");
+    if (!user)
+        return c.json({ error: "Unauthorized" }, 401);
+    const todoId = parseInt(c.req.param("id"));
+    const comments = await getComments(c.env.DB, todoId);
+    return c.json(comments);
 });
-
 app.post("/api/todos/:id/comments", async (c) => {
-  const user = c.get("user");
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const todoId = parseInt(c.req.param("id"));
-  const body = await c.req.json();
-  if (!body.content?.trim()) return c.json({ error: "Content is required" }, 400);
-
-  const comment = await createComment(c.env.DB, todoId, user.id, body.content.trim());
-  return c.json(comment, 201);
+    const user = c.get("user");
+    if (!user)
+        return c.json({ error: "Unauthorized" }, 401);
+    const todoId = parseInt(c.req.param("id"));
+    const body = await c.req.json();
+    if (!body.content?.trim())
+        return c.json({ error: "Content is required" }, 400);
+    const comment = await createComment(c.env.DB, todoId, user.id, body.content.trim());
+    return c.json(comment, 201);
 });
-
 app.delete("/api/comments/:id", async (c) => {
-  const user = c.get("user");
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const commentId = parseInt(c.req.param("id"));
-  const deleted = await deleteComment(c.env.DB, commentId, user.id);
-  if (!deleted) return c.json({ error: "Not found" }, 404);
-
-  return c.json({ success: true });
+    const user = c.get("user");
+    if (!user)
+        return c.json({ error: "Unauthorized" }, 401);
+    const commentId = parseInt(c.req.param("id"));
+    const deleted = await deleteComment(c.env.DB, commentId, user.id);
+    if (!deleted)
+        return c.json({ error: "Not found" }, 404);
+    return c.json({ success: true });
 });
-
 app.post("/api/todos/:id/share", async (c) => {
-  const user = c.get("user");
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const todoId = parseInt(c.req.param("id"));
-  const token = await shareTodo(c.env.DB, user.id, todoId);
-  if (!token) return c.json({ error: "Not found" }, 404);
-
-  return c.json({ share_token: token, share_url: `${c.env.APP_URL}/share/${token}` });
+    const user = c.get("user");
+    if (!user)
+        return c.json({ error: "Unauthorized" }, 401);
+    const todoId = parseInt(c.req.param("id"));
+    const token = await shareTodo(c.env.DB, user.id, todoId);
+    if (!token)
+        return c.json({ error: "Not found" }, 404);
+    return c.json({ share_token: token, share_url: `${c.env.APP_URL}/share/${token}` });
 });
-
 app.delete("/api/todos/:id/share", async (c) => {
-  const user = c.get("user");
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const todoId = parseInt(c.req.param("id"));
-  const success = await unshareTodo(c.env.DB, user.id, todoId);
-  if (!success) return c.json({ error: "Not found" }, 404);
-
-  return c.json({ success: true });
+    const user = c.get("user");
+    if (!user)
+        return c.json({ error: "Unauthorized" }, 401);
+    const todoId = parseInt(c.req.param("id"));
+    const success = await unshareTodo(c.env.DB, user.id, todoId);
+    if (!success)
+        return c.json({ error: "Not found" }, 404);
+    return c.json({ success: true });
 });
-
 app.get("/api/stats", async (c) => {
-  const user = c.get("user");
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const stats = await getStats(c.env.DB, user.id);
-  return c.json(stats);
+    const user = c.get("user");
+    if (!user)
+        return c.json({ error: "Unauthorized" }, 401);
+    const stats = await getStats(c.env.DB, user.id);
+    return c.json(stats);
 });
-
-function isIsoDateOnly(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+function isIsoDateOnly(value) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
-
 app.get("/api/report", async (c) => {
-  const user = c.get("user");
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-
-  const daysRaw = c.req.query("days");
-  const startRaw = c.req.query("start");
-  const endRaw = c.req.query("end");
-
-  const days = daysRaw ? Number.parseInt(daysRaw, 10) : undefined;
-
-  const start = startRaw ? startRaw.trim() : undefined;
-  const end = endRaw ? endRaw.trim() : undefined;
-
-  if (start && !isIsoDateOnly(start)) {
-    return c.json({ error: "Invalid start date (expected YYYY-MM-DD)" }, 400);
-  }
-
-  if (end && !isIsoDateOnly(end)) {
-    return c.json({ error: "Invalid end date (expected YYYY-MM-DD)" }, 400);
-  }
-
-  const report = await getSummaryReport(c.env.DB, user.id, {
-    days: Number.isFinite(days) ? days : undefined,
-    start,
-    end,
-  });
-
-  return c.json(report);
+    const user = c.get("user");
+    if (!user)
+        return c.json({ error: "Unauthorized" }, 401);
+    const daysRaw = c.req.query("days");
+    const startRaw = c.req.query("start");
+    const endRaw = c.req.query("end");
+    const days = daysRaw ? Number.parseInt(daysRaw, 10) : undefined;
+    const start = startRaw ? startRaw.trim() : undefined;
+    const end = endRaw ? endRaw.trim() : undefined;
+    if (start && !isIsoDateOnly(start)) {
+        return c.json({ error: "Invalid start date (expected YYYY-MM-DD)" }, 400);
+    }
+    if (end && !isIsoDateOnly(end)) {
+        return c.json({ error: "Invalid end date (expected YYYY-MM-DD)" }, 400);
+    }
+    const report = await getSummaryReport(c.env.DB, user.id, {
+        days: Number.isFinite(days) ? days : undefined,
+        start,
+        end,
+    });
+    return c.json(report);
 });
-
 app.get("/share/:token", async (c) => {
-  const token = c.req.param("token");
-  const todo = await getTodoByShareToken(c.env.DB, token);
-  if (!todo) return c.html(renderNotFound());
-
-  const comments = await getComments(c.env.DB, todo.id);
-  const subtasks = await getSubtasks(c.env.DB, todo.id);
-  return c.html(renderSharePage(todo, comments, subtasks));
+    const token = c.req.param("token");
+    const todo = await getTodoByShareToken(c.env.DB, token);
+    if (!todo)
+        return c.html(renderNotFound());
+    const comments = await getComments(c.env.DB, todo.id);
+    const subtasks = await getSubtasks(c.env.DB, todo.id);
+    return c.html(renderSharePage(todo, comments, subtasks));
 });
-
-function renderPage(user: User | null, view: string, appUrl: string): string {
-  return `<!DOCTYPE html>
+function renderPage(user, view, appUrl) {
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -328,9 +272,8 @@ function renderPage(user: User | null, view: string, appUrl: string): string {
 </body>
 </html>`;
 }
-
-function renderLogin(): string {
-  return `
+function renderLogin() {
+    return `
     <div class="login-container">
       <div class="login-card">
         <h1>TodoList Pro</h1>
@@ -340,9 +283,8 @@ function renderLogin(): string {
     </div>
   `;
 }
-
-function renderApp(user: User, view: string): string {
-  return `
+function renderApp(user, view) {
+    return `
     <nav class="navbar">
       <div class="nav-brand">TodoList Pro</div>
       <div class="nav-views">
@@ -410,9 +352,8 @@ function renderApp(user: User, view: string): string {
     ${renderModals()}
   `;
 }
-
-function renderListView(): string {
-  return `
+function renderListView() {
+    return `
     <div class="list-view">
       <div class="list-header">
         <h2>My Tasks</h2>
@@ -422,9 +363,8 @@ function renderListView(): string {
     </div>
   `;
 }
-
-function renderKanbanView(): string {
-  return `
+function renderKanbanView() {
+    return `
     <div class="kanban-view">
       <div class="kanban-header">
         <h2>Kanban Board</h2>
@@ -447,9 +387,8 @@ function renderKanbanView(): string {
     </div>
   `;
 }
-
-function renderGanttView(): string {
-  return `
+function renderGanttView() {
+    return `
     <div class="gantt-view">
       <div class="gantt-toolbar">
         <div class="gantt-toolbar-left">
@@ -487,9 +426,8 @@ function renderGanttView(): string {
     </div>
   `;
 }
-
-function renderDashboardView(): string {
-  return `
+function renderDashboardView() {
+    return `
     <div class="dashboard-view">
       <h2>Dashboard</h2>
       <div class="stats-grid" id="stats-grid"><div class="loading">Loading stats...</div></div>
@@ -506,9 +444,8 @@ function renderDashboardView(): string {
     </div>
   `;
 }
-
-function renderModals(): string {
-  return `
+function renderModals() {
+    return `
     <div id="todo-modal" class="modal">
       <div class="modal-content">
         <div class="modal-header">
@@ -608,9 +545,8 @@ function renderModals(): string {
     </div>
   `;
 }
-
-function getStyles(): string {
-  return `
+function getStyles() {
+    return `
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; min-height: 100vh; }
     .app { min-height: 100vh; display: flex; flex-direction: column; }
@@ -807,9 +743,8 @@ function getStyles(): string {
     }
   `;
 }
-
-function getScript(): string {
-  return `
+function getScript() {
+    return `
     let todos = [];
     let tags = [];
     let selectedTagId = null;
@@ -1505,9 +1440,8 @@ function getScript(): string {
     init();
   `;
 }
-
-function renderNotFound(): string {
-  return `<!DOCTYPE html>
+function renderNotFound() {
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -1530,17 +1464,11 @@ function renderNotFound(): string {
 </body>
 </html>`;
 }
-
-function renderSharePage(
-  todo: Todo & { username: string; avatar_url: string | null },
-  comments: Array<{ id: number; content: string; username?: string; avatar_url?: string | null }>,
-  subtasks: Subtask[]
-): string {
-  const priorityLabels: Record<number, string> = { 3: 'High', 2: 'Medium', 1: 'Low', 0: 'None' };
-  const completedSubtasks = subtasks.filter(s => s.completed).length;
-  const progress = subtasks.length > 0 ? Math.round((completedSubtasks / subtasks.length) * 100) : 0;
-
-  return `<!DOCTYPE html>
+function renderSharePage(todo, comments, subtasks) {
+    const priorityLabels = { 3: 'High', 2: 'Medium', 1: 'Low', 0: 'None' };
+    const completedSubtasks = subtasks.filter(s => s.completed).length;
+    const progress = subtasks.length > 0 ? Math.round((completedSubtasks / subtasks.length) * 100) : 0;
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -1629,14 +1557,12 @@ function renderSharePage(
 </body>
 </html>`;
 }
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+function escapeHtml(text) {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
-
 export default app;

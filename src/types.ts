@@ -77,6 +77,37 @@ export type DailyStats = {
   total_actual_minutes: number;
 };
 
+export type SummaryReportDay = {
+  date: string;
+  createdCount: number;
+  completedCount: number;
+  totalActualMinutes: number;
+  avgActualMinutes: number;
+  actualMinutesSampleCount: number;
+  totalEstimatedMinutes: number;
+  avgEstimatedMinutes: number;
+  estimatedMinutesSampleCount: number;
+};
+
+export type SummaryReport = {
+  range: {
+    start: string;
+    end: string;
+    days: number;
+  };
+  totals: {
+    createdCount: number;
+    completedCount: number;
+    totalActualMinutes: number;
+    avgActualMinutes: number;
+    actualMinutesSampleCount: number;
+    totalEstimatedMinutes: number;
+    avgEstimatedMinutes: number;
+    estimatedMinutesSampleCount: number;
+  };
+  perDay: SummaryReportDay[];
+};
+
 export type Session = {
   id: string;
   user_id: number;
