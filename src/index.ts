@@ -12,7 +12,7 @@ import {
   setSessionCookie,
   clearSessionCookie,
 } from "./auth";
-import { getTodos, createTodo, updateTodo, deleteTodo } from "./db";
+import { getTodos, createTodo, updateTodo, deleteTodo, getComments, createComment, deleteComment } from "./db";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -123,6 +123,50 @@ app.delete("/api/todos/:id", async (c) => {
 
   const todoId = parseInt(c.req.param("id"));
   const deleted = await deleteTodo(c.env.DB, user.id, todoId);
+
+  if (!deleted) {
+    return c.json({ error: "Not found" }, 404);
+  }
+
+  return c.json({ success: true });
+});
+
+app.get("/api/todos/:id/comments", async (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+
+  const todoId = parseInt(c.req.param("id"));
+  const comments = await getComments(c.env.DB, todoId);
+  return c.json(comments);
+});
+
+app.post("/api/todos/:id/comments", async (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+
+  const todoId = parseInt(c.req.param("id"));
+  const body = await c.req.json<{ content: string }>();
+
+  if (!body.content?.trim()) {
+    return c.json({ error: "Content is required" }, 400);
+  }
+
+  const comment = await createComment(c.env.DB, todoId, user.id, body.content.trim());
+  return c.json(comment, 201);
+});
+
+app.delete("/api/comments/:id", async (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+
+  const commentId = parseInt(c.req.param("id"));
+  const deleted = await deleteComment(c.env.DB, commentId, user.id);
 
   if (!deleted) {
     return c.json({ error: "Not found" }, 404);
@@ -264,6 +308,79 @@ function renderPage(user: User | null): string {
       padding: 2rem;
       color: #666;
     }
+    .todo-content {
+      flex: 1;
+      min-width: 0;
+    }
+    .todo-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .comment-toggle {
+      font-size: 0.75rem;
+      color: #667eea;
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0.25rem;
+    }
+    .comment-toggle:hover { text-decoration: underline; }
+    .comments-section {
+      margin-top: 0.75rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid #eee;
+    }
+    .comment-item {
+      display: flex;
+      gap: 0.5rem;
+      padding: 0.5rem 0;
+      font-size: 0.875rem;
+    }
+    .comment-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+    }
+    .comment-body {
+      flex: 1;
+    }
+    .comment-author {
+      font-weight: 500;
+      color: #333;
+    }
+    .comment-text {
+      color: #666;
+      margin-top: 0.125rem;
+    }
+    .comment-delete {
+      font-size: 0.75rem;
+      color: #ff4757;
+      cursor: pointer;
+      background: none;
+      border: none;
+    }
+    .comment-form {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    .comment-form input {
+      flex: 1;
+      padding: 0.5rem;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 0.875rem;
+    }
+    .comment-form button {
+      padding: 0.5rem 0.75rem;
+      font-size: 0.75rem;
+    }
+    .no-comments {
+      color: #999;
+      font-size: 0.875rem;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
@@ -313,6 +430,8 @@ function renderScript(): string {
   return `
   <script>
     let todos = [];
+    let commentsCache = {};
+    let expandedTodos = new Set();
 
     async function loadTodos() {
       const res = await fetch('/api/todos');
@@ -327,20 +446,109 @@ function renderScript(): string {
         return;
       }
       list.innerHTML = todos.map(todo => \`
-        <li class="todo-item">
+        <li class="todo-item" data-id="\${todo.id}">
           <input type="checkbox" class="todo-checkbox" 
             \${todo.completed ? 'checked' : ''} 
             onchange="toggleTodo(\${todo.id})">
-          <span class="todo-title \${todo.completed ? 'completed' : ''}">\${escapeHtml(todo.title)}</span>
+          <div class="todo-content">
+            <div class="todo-header">
+              <span class="todo-title \${todo.completed ? 'completed' : ''}">\${escapeHtml(todo.title)}</span>
+              <button class="comment-toggle" onclick="toggleComments(\${todo.id})">
+                \${expandedTodos.has(todo.id) ? 'Hide' : 'Comments'}
+              </button>
+            </div>
+            <div id="comments-\${todo.id}" class="comments-section" style="display: \${expandedTodos.has(todo.id) ? 'block' : 'none'}">
+              <div id="comments-list-\${todo.id}"></div>
+              <form class="comment-form" onsubmit="addComment(event, \${todo.id})">
+                <input type="text" placeholder="Add a comment..." id="comment-input-\${todo.id}">
+                <button type="submit" class="btn btn-primary">Post</button>
+              </form>
+            </div>
+          </div>
           <button class="btn btn-danger" onclick="deleteTodo(\${todo.id})">Delete</button>
         </li>
       \`).join('');
+      
+      expandedTodos.forEach(todoId => {
+        if (commentsCache[todoId]) {
+          renderComments(todoId, commentsCache[todoId]);
+        }
+      });
     }
 
     function escapeHtml(text) {
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
+    }
+
+    async function toggleComments(todoId) {
+      if (expandedTodos.has(todoId)) {
+        expandedTodos.delete(todoId);
+      } else {
+        expandedTodos.add(todoId);
+        if (!commentsCache[todoId]) {
+          await loadComments(todoId);
+        }
+      }
+      renderTodos();
+    }
+
+    async function loadComments(todoId) {
+      const res = await fetch('/api/todos/' + todoId + '/comments');
+      const comments = await res.json();
+      commentsCache[todoId] = comments;
+      renderComments(todoId, comments);
+    }
+
+    function renderComments(todoId, comments) {
+      const container = document.getElementById('comments-list-' + todoId);
+      if (!container) return;
+      
+      if (comments.length === 0) {
+        container.innerHTML = '<div class="no-comments">No comments yet</div>';
+        return;
+      }
+      
+      container.innerHTML = comments.map(c => \`
+        <div class="comment-item">
+          \${c.avatar_url ? '<img src="' + c.avatar_url + '" class="comment-avatar">' : ''}
+          <div class="comment-body">
+            <span class="comment-author">\${escapeHtml(c.username || 'User')}</span>
+            <div class="comment-text">\${escapeHtml(c.content)}</div>
+          </div>
+          <button class="comment-delete" onclick="deleteComment(\${c.id}, \${todoId})">Delete</button>
+        </div>
+      \`).join('');
+    }
+
+    async function addComment(e, todoId) {
+      e.preventDefault();
+      const input = document.getElementById('comment-input-' + todoId);
+      const content = input.value.trim();
+      if (!content) return;
+
+      const res = await fetch('/api/todos/' + todoId + '/comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      });
+
+      if (res.ok) {
+        const comment = await res.json();
+        if (!commentsCache[todoId]) commentsCache[todoId] = [];
+        commentsCache[todoId].push(comment);
+        renderComments(todoId, commentsCache[todoId]);
+        input.value = '';
+      }
+    }
+
+    async function deleteComment(commentId, todoId) {
+      const res = await fetch('/api/comments/' + commentId, { method: 'DELETE' });
+      if (res.ok) {
+        commentsCache[todoId] = commentsCache[todoId].filter(c => c.id !== commentId);
+        renderComments(todoId, commentsCache[todoId]);
+      }
     }
 
     async function addTodo(e) {
@@ -385,6 +593,8 @@ function renderScript(): string {
       const res = await fetch('/api/todos/' + id, { method: 'DELETE' });
       if (res.ok) {
         todos = todos.filter(t => t.id !== id);
+        delete commentsCache[id];
+        expandedTodos.delete(id);
         renderTodos();
       }
     }
