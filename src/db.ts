@@ -320,6 +320,65 @@ export async function getTodoByShareToken(db: D1Database, token: string): Promis
   return todo || null;
 }
 
+export async function getGanttByTag(
+  db: D1Database,
+  userId: number
+): Promise<Array<{ tag: Tag | null; items: Array<{ id: number; title: string; start: string; end: string; status: string; priority: number; tagId: number | null }> }>> {
+  const { results } = await db
+    .prepare(`
+      SELECT t.*, tg.id as tag_id, tg.name as tag_name, tg.color as tag_color
+      FROM todos t
+      LEFT JOIN todo_tags tt ON t.id = tt.todo_id
+      LEFT JOIN tags tg ON tt.tag_id = tg.id
+      WHERE t.user_id = ? AND t.archived = 0
+    `)
+    .bind(userId)
+    .all<Todo & { tag_id: number | null; tag_name: string | null; tag_color: string | null }>();
+
+  const rows = results || [];
+  const groups: Record<string, { tag: Tag | null; items: Array<{ id: number; title: string; start: string; end: string; status: string; priority: number; tagId: number | null }> }> = {};
+
+  for (const row of rows) {
+    const tagKey = row.tag_id ?? 'untagged';
+    if (!groups[tagKey]) {
+      groups[tagKey] = {
+        tag: row.tag_id
+          ? {
+              id: row.tag_id,
+              user_id: row.user_id,
+              name: row.tag_name || 'Unknown',
+              color: row.tag_color || '#9ca3af',
+              created_at: row.created_at,
+            }
+          : null,
+        items: [],
+      };
+    }
+
+    const start = row.created_at;
+    const end = row.completed_at || row.due_date || row.created_at;
+
+    groups[tagKey].items.push({
+      id: row.id,
+      title: row.title,
+      start,
+      end,
+      status: row.status,
+      priority: row.priority,
+      tagId: row.tag_id ?? null,
+    });
+  }
+
+  const values = Object.values(groups);
+  values.sort((a, b) => {
+    const aName = a.tag?.name || 'Untagged';
+    const bName = b.tag?.name || 'Untagged';
+    return aName.localeCompare(bName);
+  });
+
+  return values;
+}
+
 export async function updateDailyStats(db: D1Database, userId: number, type: 'created' | 'completed'): Promise<void> {
   const today = new Date().toISOString().split('T')[0];
   

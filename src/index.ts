@@ -314,7 +314,10 @@ function renderApp(user: User, view: string): string {
       <div class="nav-views">
         <a href="/?view=list" class="nav-link ${view === 'list' ? 'active' : ''}">List</a>
         <a href="/?view=kanban" class="nav-link ${view === 'kanban' ? 'active' : ''}">Kanban</a>
+        <a href="/?view=gantt" class="nav-link ${view === 'gantt' ? 'active' : ''}">Gantt</a>
         <a href="/?view=dashboard" class="nav-link ${view === 'dashboard' ? 'active' : ''}">Dashboard</a>
+
+
       </div>
       <div class="nav-user">
         ${user.avatar_url ? `<img src="${user.avatar_url}" class="avatar" alt="">` : ''}
@@ -367,7 +370,7 @@ function renderApp(user: User, view: string): string {
         </div>
       </aside>
       <div class="content" id="main-view">
-        ${view === 'list' ? renderListView() : view === 'kanban' ? renderKanbanView() : renderDashboardView()}
+        ${view === 'list' ? renderListView() : view === 'kanban' ? renderKanbanView() : view === 'gantt' ? renderGanttView() : renderDashboardView()}
       </div>
     </main>
     ${renderModals()}
@@ -407,6 +410,22 @@ function renderKanbanView(): string {
           <div class="kanban-cards" id="kanban-done" ondrop="drop(event, 'done')" ondragover="allowDrop(event)"></div>
         </div>
       </div>
+    </div>
+  `;
+}
+
+function renderGanttView(): string {
+  return `
+    <div class="gantt-view">
+      <div class="gantt-header">
+        <h2>Gantt by Tag</h2>
+        <div class="gantt-legend">
+          <span class="legend-item"><span class="legend-dot status-todo"></span>Todo</span>
+          <span class="legend-item"><span class="legend-dot status-doing"></span>Doing</span>
+          <span class="legend-item"><span class="legend-dot status-done"></span>Done</span>
+        </div>
+      </div>
+      <div id="gantt-container"><div class="loading">Loading...</div></div>
     </div>
   `;
 }
@@ -605,6 +624,27 @@ function getStyles(): string {
     .chart-bar-fill { height: 20px; border-radius: 4px; transition: width 0.3s; }
     .chart-bar-value { font-size: 0.75rem; color: #666; }
     
+    .gantt-view { display: flex; flex-direction: column; gap: 1rem; }
+    .gantt-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+    .gantt-legend { display: flex; gap: 0.75rem; font-size: 0.85rem; color: #555; }
+    .legend-item { display: flex; align-items: center; gap: 0.35rem; }
+    .legend-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+    .status-todo { background: #9ca3af; }
+    .status-doing { background: #f59e0b; }
+    .status-done { background: #10b981; }
+    #gantt-container { background: white; border-radius: 8px; padding: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); min-height: 320px; }
+    .gantt-axis { display: flex; justify-content: space-between; font-size: 0.85rem; color: #666; margin-bottom: 0.5rem; }
+    .gantt-rows { display: flex; flex-direction: column; gap: 1rem; }
+    .gantt-row { display: grid; grid-template-columns: 180px 1fr; gap: 0.75rem; align-items: flex-start; }
+    .gantt-row-label { font-weight: 600; color: #333; display: flex; align-items: center; gap: 0.5rem; }
+    .gantt-row-bars { position: relative; background: #f5f7fa; border: 1px solid #e5e7eb; border-radius: 8px; height: 56px; overflow: hidden; }
+    .gantt-bar { position: absolute; top: 8px; height: 40px; border-radius: 6px; padding: 6px 10px; color: #fff; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 2px 6px rgba(0,0,0,0.12); }
+    .gantt-bar.status-todo { background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%); }
+    .gantt-bar.status-doing { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+    .gantt-bar.status-done { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+    .gantt-bar-title { font-size: 0.85rem; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gantt-bar-dates { font-size: 0.75rem; opacity: 0.9; }
+    
     .btn { padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 500; background: #f0f0f0; color: #333; transition: all 0.2s; text-decoration: none; display: inline-block; }
     .btn:hover { background: #e0e0e0; }
     .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
@@ -732,6 +772,8 @@ function getScript(): string {
         renderKanban();
       } else if (view === 'list') {
         renderList();
+      } else if (view === 'gantt') {
+        renderGantt();
       }
     }
 
@@ -753,17 +795,83 @@ function getScript(): string {
         if (!container) return;
         
         const statusTodos = todos.filter(t => t.status === status);
-        container.innerHTML = statusTodos.map(todo => \`
-          <div class="kanban-card" draggable="true" ondragstart="drag(event)" data-id="\${todo.id}">
-            <div class="todo-card-title \${todo.completed ? 'completed' : ''}">\${esc(todo.title)}</div>
-            \${todo.tags.length ? '<div class="todo-card-meta">' + todo.tags.map(t => '<span class="tag-badge" style="background:' + t.color + '">' + esc(t.name) + '</span>').join('') + '</div>' : ''}
-            \${todo.progress > 0 ? '<div class="progress-bar"><div class="progress-fill" style="width:' + todo.progress + '%"></div></div>' : ''}
+        container.innerHTML = statusTodos.map(todo => `
+          <div class="kanban-card" draggable="true" ondragstart="drag(event)" data-id="${todo.id}">
+            <div class="todo-card-title ${todo.completed ? 'completed' : ''}">${esc(todo.title)}</div>
+            ${todo.tags.length ? '<div class="todo-card-meta">' + todo.tags.map(t => '<span class="tag-badge" style="background:' + t.color + '">' + esc(t.name) + '</span>').join('') + '</div>' : ''}
+            ${todo.progress > 0 ? '<div class="progress-bar"><div class="progress-fill" style="width:' + todo.progress + '%"></div></div>' : ''}
           </div>
-        \`).join('') || '<div class="empty-state" style="padding:1rem;font-size:0.875rem;">Drop tasks here</div>';
+        `).join('') || '<div class="empty-state" style="padding:1rem;font-size:0.875rem;">Drop tasks here</div>';
       });
     }
 
+    function renderGantt() {
+      const container = document.getElementById('gantt-container');
+      if (!container) return;
+      if (!todos.length) {
+        container.innerHTML = '<div class="empty-state">No tasks yet. Click "+ Add Task" to create one.</div>';
+        return;
+      }
+
+      const DAY = 24 * 60 * 60 * 1000;
+      const parsedTodos = todos.map(todo => {
+        const start = todo.due_date ? new Date(todo.due_date) : new Date(todo.created_at || Date.now());
+        const end = todo.due_date ? new Date(todo.due_date) : new Date(start.getTime() + DAY);
+        return { ...todo, start, end };
+      });
+
+      const minStart = new Date(Math.min(...parsedTodos.map(t => t.start.getTime())));
+      const rawMaxEnd = new Date(Math.max(...parsedTodos.map(t => t.end.getTime()), minStart.getTime() + 7 * DAY));
+      const spanDays = Math.max(7, Math.ceil((rawMaxEnd.getTime() - minStart.getTime()) / DAY));
+      const maxEnd = new Date(minStart.getTime() + spanDays * DAY);
+      const totalMs = maxEnd.getTime() - minStart.getTime();
+
+      const grouped = new Map();
+      parsedTodos.forEach(todo => {
+        const targetTags = todo.tags.length ? todo.tags : [{ id: -1, name: 'Untagged', color: '#9ca3af' }];
+        targetTags.forEach(tag => {
+          if (!grouped.has(tag.id)) grouped.set(tag.id, { tag, items: [] });
+          grouped.get(tag.id).items.push(todo);
+        });
+      });
+
+      const axisLabels = Array.from({ length: spanDays + 1 }, (_, i) => {
+        const d = new Date(minStart.getTime() + i * DAY);
+        return formatAxisDate(d);
+      });
+
+      const rowsHtml = Array.from(grouped.values()).map(group => {
+        const bars = group.items
+          .sort((a, b) => a.start.getTime() - b.start.getTime())
+          .map(todo => {
+            const startMs = Math.max(minStart.getTime(), todo.start.getTime());
+            const endMs = Math.max(startMs + DAY, Math.min(maxEnd.getTime(), todo.end.getTime()));
+            const left = ((startMs - minStart.getTime()) / totalMs) * 100;
+            const width = Math.max(2, ((endMs - startMs) / totalMs) * 100);
+            return `
+              <div class="gantt-bar status-${todo.status}" style="left:${left}%;width:${width}%" title="${esc(todo.title)}">
+                <div class="gantt-bar-title">${esc(todo.title)}</div>
+                <div class="gantt-bar-dates">${formatDateRange(new Date(startMs), new Date(endMs))}</div>
+              </div>
+            `;
+          }).join('');
+
+        return `
+          <div class="gantt-row">
+            <div class="gantt-row-label"><span class="tag-dot" style="background:${group.tag.color}"></span><span>${esc(group.tag.name)}</span></div>
+            <div class="gantt-row-bars">${bars || '<div class="empty-state" style="padding:1rem;">No tasks</div>'}</div>
+          </div>
+        `;
+      }).join('');
+
+      container.innerHTML = `
+        <div class="gantt-axis">${axisLabels.join(' | ')}</div>
+        <div class="gantt-rows">${rowsHtml}</div>
+      `;
+    }
+
     function renderTodoCard(todo) {
+
       const priorityLabels = { 3: 'High', 2: 'Medium', 1: 'Low' };
       const dueDate = todo.due_date ? new Date(todo.due_date) : null;
       const isOverdue = dueDate && dueDate < new Date() && !todo.completed;
