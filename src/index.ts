@@ -417,15 +417,39 @@ function renderKanbanView(): string {
 function renderGanttView(): string {
   return `
     <div class="gantt-view">
-      <div class="gantt-header">
-        <h2>Gantt by Tag</h2>
-        <div class="gantt-legend">
-          <span class="legend-item"><span class="legend-dot status-todo"></span>Todo</span>
-          <span class="legend-item"><span class="legend-dot status-doing"></span>Doing</span>
-          <span class="legend-item"><span class="legend-dot status-done"></span>Done</span>
+      <div class="gantt-toolbar">
+        <div class="gantt-toolbar-left">
+          <h2>Timeline</h2>
+          <button class="btn btn-sm" onclick="scrollToToday()" id="btn-today">Today</button>
+        </div>
+        <div class="gantt-toolbar-center">
+          <div class="zoom-controls">
+            <button class="zoom-btn" data-zoom="day" onclick="setZoom('day')">Day</button>
+            <button class="zoom-btn active" data-zoom="week" onclick="setZoom('week')">Week</button>
+            <button class="zoom-btn" data-zoom="month" onclick="setZoom('month')">Month</button>
+          </div>
+        </div>
+        <div class="gantt-toolbar-right">
+          <div class="gantt-legend">
+            <span class="legend-item"><span class="legend-dot status-todo"></span>Todo</span>
+            <span class="legend-item"><span class="legend-dot status-doing"></span>Doing</span>
+            <span class="legend-item"><span class="legend-dot status-done"></span>Done</span>
+            <span class="legend-item"><span class="legend-dot status-overdue"></span>Overdue</span>
+          </div>
         </div>
       </div>
-      <div id="gantt-container"><div class="loading">Loading...</div></div>
+      <div class="gantt-container" id="gantt-container">
+        <div class="gantt-panel">
+          <div class="gantt-task-list" id="gantt-task-list">
+            <div class="gantt-task-header">Tasks</div>
+          </div>
+          <div class="gantt-timeline" id="gantt-timeline">
+            <div class="gantt-timeline-header" id="gantt-timeline-header"></div>
+            <div class="gantt-timeline-body" id="gantt-timeline-body"></div>
+            <div class="gantt-today-line" id="gantt-today-line"><span class="today-label">Today</span></div>
+          </div>
+        </div>
+      </div>
     </div>
   `;
 }
@@ -624,30 +648,60 @@ function getStyles(): string {
     .chart-bar-fill { height: 20px; border-radius: 4px; transition: width 0.3s; }
     .chart-bar-value { font-size: 0.75rem; color: #666; }
     
-    .gantt-view { display: flex; flex-direction: column; gap: 1.5rem; }
-    .gantt-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
-    .gantt-legend { display: flex; gap: 1rem; font-size: 0.8rem; color: #64748b; font-weight: 500; }
-    .legend-item { display: flex; align-items: center; gap: 0.4rem; }
-    .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-    .status-todo { background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%); }
-    .status-doing { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); }
-    .status-done { background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); }
-    #gantt-container { background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); border-radius: 16px; padding: 1.5rem; box-shadow: 0 4px 20px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04); min-height: 360px; border: 1px solid #e2e8f0; }
-    .gantt-axis { display: flex; font-size: 0.7rem; color: #94a3b8; padding: 0.75rem 0; border-bottom: 2px solid #e2e8f0; margin-bottom: 1rem; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; background: linear-gradient(90deg, transparent 0%, #f1f5f9 50%, transparent 100%); border-radius: 4px; justify-content: center; gap: 1rem; flex-wrap: wrap; }
-    .gantt-rows { display: flex; flex-direction: column; gap: 0; }
-    .gantt-row { display: grid; grid-template-columns: 140px 1fr; gap: 1rem; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid #f1f5f9; transition: background-color 0.2s ease; }
-    .gantt-row:hover { background: linear-gradient(90deg, #f8fafc 0%, transparent 30%); }
-    .gantt-row:last-child { border-bottom: none; }
-    .gantt-row-label { font-weight: 600; color: #334155; display: flex; align-items: center; gap: 0.6rem; font-size: 0.875rem; }
-    .gantt-row-label .tag-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
-    .gantt-row-bars { position: relative; background: linear-gradient(90deg, #f8fafc 0%, #f1f5f9 50%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; height: 52px; overflow: visible; box-shadow: inset 0 1px 2px rgba(0,0,0,0.03); }
-    .gantt-bar { position: absolute; top: 6px; height: 40px; border-radius: 20px; padding: 6px 14px; color: #fff; display: flex; flex-direction: column; justify-content: center; gap: 2px; box-shadow: 0 2px 8px rgba(0,0,0,0.15), 0 1px 2px rgba(0,0,0,0.1); cursor: pointer; transition: all 0.2s ease; transform-origin: left center; z-index: 1; }
-    .gantt-bar:hover { transform: scale(1.03) translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.1); z-index: 10; }
+    .gantt-view { display: flex; flex-direction: column; height: calc(100vh - 180px); }
+    .gantt-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: white; border-radius: 12px 12px 0 0; border: 1px solid #e2e8f0; border-bottom: none; gap: 1rem; flex-wrap: wrap; }
+    .gantt-toolbar h2 { font-size: 1.25rem; margin: 0; color: #1e293b; }
+    .gantt-toolbar-left { display: flex; align-items: center; gap: 1rem; }
+    .gantt-toolbar-center { display: flex; align-items: center; }
+    .gantt-toolbar-right { display: flex; align-items: center; }
+    .zoom-controls { display: flex; background: #f1f5f9; border-radius: 8px; padding: 3px; gap: 2px; }
+    .zoom-btn { padding: 0.4rem 1rem; border: none; background: transparent; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; color: #64748b; transition: all 0.2s; }
+    .zoom-btn:hover { color: #334155; }
+    .zoom-btn.active { background: white; color: #667eea; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .gantt-legend { display: flex; gap: 1rem; font-size: 0.75rem; color: #64748b; font-weight: 500; }
+    .legend-item { display: flex; align-items: center; gap: 0.35rem; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .status-todo { background: #94a3b8; }
+    .status-doing { background: #3b82f6; }
+    .status-done { background: #22c55e; }
+    .status-overdue { background: #ef4444; }
+    .gantt-container { flex: 1; background: white; border-radius: 0 0 12px 12px; border: 1px solid #e2e8f0; overflow: hidden; min-height: 300px; }
+    .gantt-panel { display: flex; height: 100%; position: relative; }
+    .gantt-task-list { width: 200px; flex-shrink: 0; border-right: 1px solid #e2e8f0; background: #f8fafc; display: flex; flex-direction: column; }
+    .gantt-task-header { padding: 0.75rem 1rem; font-weight: 600; font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e2e8f0; background: #f1f5f9; height: 65px; display: flex; align-items: flex-end; }
+    .gantt-task-item { padding: 0.6rem 1rem; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; gap: 0.5rem; height: 44px; cursor: pointer; transition: background 0.15s; }
+    .gantt-task-item:hover { background: #e2e8f0; }
+    .gantt-task-status { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .gantt-task-title { font-size: 0.8rem; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+    .gantt-task-priority { font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .gantt-task-priority.high { background: #fee2e2; color: #dc2626; }
+    .gantt-timeline { flex: 1; overflow-x: auto; overflow-y: hidden; position: relative; }
+    .gantt-timeline-header { position: sticky; top: 0; background: #f8fafc; z-index: 10; border-bottom: 1px solid #e2e8f0; }
+    .gantt-timeline-months { display: flex; border-bottom: 1px solid #e2e8f0; }
+    .gantt-month-cell { padding: 0.5rem 0; text-align: center; font-size: 0.75rem; font-weight: 600; color: #334155; border-right: 1px solid #e2e8f0; background: #f1f5f9; }
+    .gantt-timeline-units { display: flex; }
+    .gantt-unit-cell { padding: 0.4rem 0; text-align: center; font-size: 0.65rem; color: #94a3b8; border-right: 1px solid #f1f5f9; font-weight: 500; }
+    .gantt-unit-cell.weekend { background: #fef3c7; }
+    .gantt-unit-cell.today { background: #fee2e2; color: #dc2626; font-weight: 700; }
+    .gantt-timeline-body { position: relative; min-height: 200px; }
+    .gantt-timeline-row { height: 44px; border-bottom: 1px solid #f1f5f9; position: relative; }
+    .gantt-timeline-grid { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; pointer-events: none; }
+    .gantt-grid-cell { border-right: 1px solid #f1f5f9; height: 100%; }
+    .gantt-grid-cell.weekend { background: rgba(254, 243, 199, 0.3); }
+    .gantt-bar { position: absolute; top: 6px; height: 32px; border-radius: 6px; padding: 4px 10px; color: #fff; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.15); cursor: pointer; transition: all 0.15s ease; z-index: 2; min-width: 24px; }
+    .gantt-bar:hover { transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0,0,0,0.2); z-index: 20; }
     .gantt-bar.status-todo { background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%); }
     .gantt-bar.status-doing { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); }
     .gantt-bar.status-done { background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); }
-    .gantt-bar-title { font-size: 0.8rem; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
-    .gantt-bar-dates { font-size: 0.65rem; opacity: 0.9; font-weight: 500; letter-spacing: 0.01em; }
+    .gantt-bar.overdue { box-shadow: 0 0 0 2px #ef4444, 0 2px 4px rgba(0,0,0,0.15); }
+    .gantt-bar.due-today { box-shadow: 0 0 0 2px #f59e0b, 0 2px 4px rgba(0,0,0,0.15); }
+    .gantt-bar-title { font-size: 0.75rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+    .gantt-bar-progress { position: absolute; bottom: 2px; left: 4px; right: 4px; height: 3px; background: rgba(255,255,255,0.3); border-radius: 2px; overflow: hidden; }
+    .gantt-bar-progress-fill { height: 100%; background: rgba(255,255,255,0.8); border-radius: 2px; }
+    .gantt-today-line { position: absolute; top: 0; bottom: 0; width: 2px; background: #ef4444; z-index: 15; pointer-events: none; display: none; }
+    .gantt-today-line::before { content: ''; position: absolute; top: -4px; left: -4px; width: 10px; height: 10px; background: #ef4444; border-radius: 50%; }
+    .today-label { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-size: 0.65rem; font-weight: 700; color: #ef4444; white-space: nowrap; background: white; padding: 2px 6px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .gantt-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: #94a3b8; font-size: 0.9rem; }
     
     .btn { padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 500; background: #f0f0f0; color: #333; transition: all 0.2s; text-decoration: none; display: inline-block; }
     .btn:hover { background: #e0e0e0; }
@@ -720,7 +774,10 @@ function getScript(): string {
     let tags = [];
     let selectedTagId = null;
     let searchTimeout = null;
+    let ganttZoom = 'week';
     const view = new URLSearchParams(location.search).get('view') || 'list';
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     async function init() {
       await Promise.all([loadTodos(), loadTags()]);
@@ -822,76 +879,215 @@ function getScript(): string {
 
 
 
-    function formatAxisDate(d) {
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      return months[d.getMonth()] + ' ' + d.getDate();
+    function setZoom(level) {
+      ganttZoom = level;
+      document.querySelectorAll('.zoom-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.zoom === level);
+      });
+      renderGantt();
     }
 
-    function formatDateRange(start, end) {
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const startStr = months[start.getMonth()] + ' ' + start.getDate();
-      const endStr = months[end.getMonth()] + ' ' + end.getDate();
-      return startStr === endStr ? startStr : startStr + ' - ' + endStr;
+    function scrollToToday() {
+      const todayLine = document.getElementById('gantt-today-line');
+      const timeline = document.getElementById('gantt-timeline');
+      if (todayLine && timeline && todayLine.style.display !== 'none') {
+        const lineLeft = parseInt(todayLine.style.left) || 0;
+        timeline.scrollLeft = Math.max(0, lineLeft - timeline.clientWidth / 2);
+      }
+    }
+
+    function getWeekNumber(d) {
+      const date = new Date(d.getTime());
+      date.setHours(0, 0, 0, 0);
+      date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
+      const week1 = new Date(date.getFullYear(), 0, 4);
+      return 1 + Math.round(((date.getTime() - week1.getTime()) / DAY_MS - 3 + (week1.getDay() + 6) % 7) / 7);
+    }
+
+    function isWeekend(d) {
+      const day = d.getDay();
+      return day === 0 || day === 6;
+    }
+
+    function isSameDay(d1, d2) {
+      return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
     }
 
     function renderGantt() {
-      const container = document.getElementById('gantt-container');
-      if (!container) return;
+      const taskList = document.getElementById('gantt-task-list');
+      const timelineHeader = document.getElementById('gantt-timeline-header');
+      const timelineBody = document.getElementById('gantt-timeline-body');
+      const todayLine = document.getElementById('gantt-today-line');
+      if (!taskList || !timelineHeader || !timelineBody) return;
+
       if (!todos.length) {
-        container.innerHTML = '<div class="empty-state">No tasks yet. Click "+ Add Task" to create one.</div>';
+        taskList.innerHTML = '<div class="gantt-task-header">Tasks</div><div class="gantt-empty">No tasks</div>';
+        timelineHeader.innerHTML = '';
+        timelineBody.innerHTML = '<div class="gantt-empty">Add tasks with due dates to see the timeline</div>';
+        if (todayLine) todayLine.style.display = 'none';
         return;
       }
 
-      const DAY = 24 * 60 * 60 * 1000;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
       const parsedTodos = todos.map(todo => {
-        const start = todo.due_date ? new Date(todo.due_date) : new Date(todo.created_at || Date.now());
-        const end = todo.due_date ? new Date(todo.due_date) : new Date(start.getTime() + DAY);
-        return { ...todo, start, end };
-      });
+        const dueDate = todo.due_date ? new Date(todo.due_date) : null;
+        const createdDate = new Date(todo.created_at || Date.now());
+        const start = dueDate || createdDate;
+        const end = dueDate || new Date(start.getTime() + DAY_MS);
+        const isOverdue = dueDate && dueDate < today && todo.status !== 'done';
+        const isDueToday = dueDate && isSameDay(dueDate, today);
+        return { ...todo, start, end, isOverdue, isDueToday };
+      }).sort((a, b) => a.start.getTime() - b.start.getTime());
 
-      const minStart = new Date(Math.min(...parsedTodos.map(t => t.start.getTime())));
-      const rawMaxEnd = new Date(Math.max(...parsedTodos.map(t => t.end.getTime()), minStart.getTime() + 7 * DAY));
-      const spanDays = Math.max(7, Math.ceil((rawMaxEnd.getTime() - minStart.getTime()) / DAY));
-      const maxEnd = new Date(minStart.getTime() + spanDays * DAY);
-      const totalMs = maxEnd.getTime() - minStart.getTime();
+      const unitWidth = ganttZoom === 'day' ? 40 : ganttZoom === 'week' ? 120 : 200;
+      const buffer = ganttZoom === 'day' ? 7 : ganttZoom === 'week' ? 2 : 1;
 
-      const grouped = new Map();
+      let minDate = new Date(Math.min(...parsedTodos.map(t => t.start.getTime())));
+      let maxDate = new Date(Math.max(...parsedTodos.map(t => t.end.getTime())));
+      
+      if (ganttZoom === 'week') {
+        const dayOfWeek = minDate.getDay();
+        minDate = new Date(minDate.getTime() - dayOfWeek * DAY_MS - buffer * 7 * DAY_MS);
+        maxDate = new Date(maxDate.getTime() + (6 - maxDate.getDay()) * DAY_MS + buffer * 7 * DAY_MS);
+      } else if (ganttZoom === 'month') {
+        minDate = new Date(minDate.getFullYear(), minDate.getMonth() - buffer, 1);
+        maxDate = new Date(maxDate.getFullYear(), maxDate.getMonth() + buffer + 1, 0);
+      } else {
+        minDate = new Date(minDate.getTime() - buffer * DAY_MS);
+        maxDate = new Date(maxDate.getTime() + buffer * DAY_MS);
+      }
+
+      const units = [];
+      const monthGroups = [];
+      let currentMonth = -1;
+      let currentMonthStart = 0;
+
+      if (ganttZoom === 'day') {
+        let d = new Date(minDate);
+        while (d <= maxDate) {
+          if (d.getMonth() !== currentMonth) {
+            if (currentMonth !== -1) monthGroups.push({ month: currentMonth, year: d.getFullYear() - (d.getMonth() === 0 ? 1 : 0), count: units.length - currentMonthStart });
+            currentMonth = d.getMonth();
+            currentMonthStart = units.length;
+          }
+          units.push({ date: new Date(d), label: d.getDate().toString(), isWeekend: isWeekend(d), isToday: isSameDay(d, today) });
+          d = new Date(d.getTime() + DAY_MS);
+        }
+        if (currentMonth !== -1) monthGroups.push({ month: currentMonth, year: maxDate.getFullYear(), count: units.length - currentMonthStart });
+      } else if (ganttZoom === 'week') {
+        let d = new Date(minDate);
+        while (d <= maxDate) {
+          if (d.getMonth() !== currentMonth) {
+            if (currentMonth !== -1) monthGroups.push({ month: currentMonth, year: d.getFullYear() - (d.getMonth() === 0 ? 1 : 0), count: units.length - currentMonthStart });
+            currentMonth = d.getMonth();
+            currentMonthStart = units.length;
+          }
+          const weekEnd = new Date(d.getTime() + 6 * DAY_MS);
+          const hasToday = today >= d && today <= weekEnd;
+          units.push({ date: new Date(d), label: 'W' + getWeekNumber(d), isWeekend: false, isToday: hasToday });
+          d = new Date(d.getTime() + 7 * DAY_MS);
+        }
+        if (currentMonth !== -1) monthGroups.push({ month: currentMonth, year: maxDate.getFullYear(), count: units.length - currentMonthStart });
+      } else {
+        let d = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+        let currentYear = -1;
+        while (d <= maxDate) {
+          if (d.getFullYear() !== currentYear) {
+            if (currentYear !== -1) monthGroups.push({ month: -1, year: currentYear, count: units.length - currentMonthStart });
+            currentYear = d.getFullYear();
+            currentMonthStart = units.length;
+          }
+          const hasToday = today.getFullYear() === d.getFullYear() && today.getMonth() === d.getMonth();
+          units.push({ date: new Date(d), label: MONTHS[d.getMonth()], isWeekend: false, isToday: hasToday });
+          d = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+        }
+        if (currentYear !== -1) monthGroups.push({ month: -1, year: currentYear, count: units.length - currentMonthStart });
+      }
+
+      const totalWidth = units.length * unitWidth;
+
+      let monthsHtml = '';
+      if (ganttZoom !== 'month') {
+        monthsHtml = '<div class="gantt-timeline-months">' + monthGroups.map(g => 
+          '<div class="gantt-month-cell" style="width:' + (g.count * unitWidth) + 'px">' + MONTHS[g.month] + ' ' + g.year + '</div>'
+        ).join('') + '</div>';
+      } else {
+        monthsHtml = '<div class="gantt-timeline-months">' + monthGroups.map(g =>
+          '<div class="gantt-month-cell" style="width:' + (g.count * unitWidth) + 'px">' + g.year + '</div>'
+        ).join('') + '</div>';
+      }
+
+      const unitsHtml = '<div class="gantt-timeline-units">' + units.map(u =>
+        '<div class="gantt-unit-cell' + (u.isWeekend ? ' weekend' : '') + (u.isToday ? ' today' : '') + '" style="width:' + unitWidth + 'px">' + u.label + '</div>'
+      ).join('') + '</div>';
+
+      timelineHeader.innerHTML = monthsHtml + unitsHtml;
+
+      let taskListHtml = '<div class="gantt-task-header">Tasks</div>';
+      let rowsHtml = '';
+      const gridHtml = '<div class="gantt-timeline-grid">' + units.map(u =>
+        '<div class="gantt-grid-cell' + (u.isWeekend ? ' weekend' : '') + '" style="width:' + unitWidth + 'px"></div>'
+      ).join('') + '</div>';
+
       parsedTodos.forEach(todo => {
-        const targetTags = todo.tags.length ? todo.tags : [{ id: -1, name: 'Untagged', color: '#9ca3af' }];
-        targetTags.forEach(tag => {
-          if (!grouped.has(tag.id)) grouped.set(tag.id, { tag, items: [] });
-          grouped.get(tag.id).items.push(todo);
-        });
+        const statusColor = todo.status === 'done' ? '#22c55e' : todo.status === 'doing' ? '#3b82f6' : '#94a3b8';
+        const priorityHtml = todo.priority === 3 ? '<span class="gantt-task-priority high">!</span>' : '';
+        taskListHtml += '<div class="gantt-task-item" onclick="showDetail(' + todo.id + ')">' +
+          '<span class="gantt-task-status" style="background:' + statusColor + '"></span>' +
+          '<span class="gantt-task-title">' + esc(todo.title) + '</span>' +
+          priorityHtml + '</div>';
+
+        const startOffset = (todo.start.getTime() - minDate.getTime()) / DAY_MS;
+        const duration = Math.max(1, (todo.end.getTime() - todo.start.getTime()) / DAY_MS);
+        
+        let left, width;
+        if (ganttZoom === 'day') {
+          left = startOffset * unitWidth;
+          width = duration * unitWidth;
+        } else if (ganttZoom === 'week') {
+          left = (startOffset / 7) * unitWidth;
+          width = Math.max(unitWidth * 0.8, (duration / 7) * unitWidth);
+        } else {
+          const monthOffset = (todo.start.getFullYear() - minDate.getFullYear()) * 12 + (todo.start.getMonth() - minDate.getMonth());
+          left = monthOffset * unitWidth + (todo.start.getDate() / 30) * unitWidth;
+          width = Math.max(unitWidth * 0.5, (duration / 30) * unitWidth);
+        }
+
+        const extraClass = todo.isOverdue ? ' overdue' : todo.isDueToday ? ' due-today' : '';
+        const progressHtml = todo.progress > 0 ? '<div class="gantt-bar-progress"><div class="gantt-bar-progress-fill" style="width:' + todo.progress + '%"></div></div>' : '';
+
+        rowsHtml += '<div class="gantt-timeline-row">' +
+          '<div class="gantt-bar status-' + todo.status + extraClass + '" style="left:' + left + 'px;width:' + width + 'px" onclick="showDetail(' + todo.id + ')" title="' + esc(todo.title) + '">' +
+          '<span class="gantt-bar-title">' + esc(todo.title) + '</span>' +
+          progressHtml + '</div></div>';
       });
 
-      const axisLabels = Array.from({ length: spanDays + 1 }, (_, i) => {
-        const d = new Date(minStart.getTime() + i * DAY);
-        return formatAxisDate(d);
-      });
+      taskList.innerHTML = taskListHtml;
+      timelineBody.innerHTML = gridHtml + rowsHtml;
+      timelineBody.style.width = totalWidth + 'px';
 
-      const rowsHtml = Array.from(grouped.values()).map(group => {
-        const bars = group.items
-          .sort((a, b) => a.start.getTime() - b.start.getTime())
-          .map(todo => {
-            const startMs = Math.max(minStart.getTime(), todo.start.getTime());
-            const endMs = Math.max(startMs + DAY, Math.min(maxEnd.getTime(), todo.end.getTime()));
-            const left = ((startMs - minStart.getTime()) / totalMs) * 100;
-            const width = Math.max(2, ((endMs - startMs) / totalMs) * 100);
-            return '<div class="gantt-bar status-' + todo.status + '" style="left:' + left + '%;width:' + width + '%" title="' + esc(todo.title) + '">' +
-              '<div class="gantt-bar-title">' + esc(todo.title) + '</div>' +
-              '<div class="gantt-bar-dates">' + formatDateRange(new Date(startMs), new Date(endMs)) + '</div>' +
-              '</div>';
-          }).join('');
+      if (todayLine) {
+        const todayOffset = (today.getTime() - minDate.getTime()) / DAY_MS;
+        let todayLeft;
+        if (ganttZoom === 'day') {
+          todayLeft = todayOffset * unitWidth;
+        } else if (ganttZoom === 'week') {
+          todayLeft = (todayOffset / 7) * unitWidth;
+        } else {
+          const monthOffset = (today.getFullYear() - minDate.getFullYear()) * 12 + (today.getMonth() - minDate.getMonth());
+          todayLeft = monthOffset * unitWidth + (today.getDate() / 30) * unitWidth;
+        }
+        if (todayLeft >= 0 && todayLeft <= totalWidth) {
+          todayLine.style.left = todayLeft + 'px';
+          todayLine.style.display = 'block';
+        } else {
+          todayLine.style.display = 'none';
+        }
+      }
 
-        const barsContent = bars || '<div class="empty-state" style="padding:1rem;">No tasks</div>';
-        return '<div class="gantt-row">' +
-          '<div class="gantt-row-label"><span class="tag-dot" style="background:' + group.tag.color + '"></span><span>' + esc(group.tag.name) + '</span></div>' +
-          '<div class="gantt-row-bars">' + barsContent + '</div>' +
-          '</div>';
-      }).join('');
-
-      container.innerHTML = '<div class="gantt-axis">' + axisLabels.join(' | ') + '</div>' +
-        '<div class="gantt-rows">' + rowsHtml + '</div>';
+      setTimeout(scrollToToday, 100);
     }
 
     function renderTodoCard(todo) {
