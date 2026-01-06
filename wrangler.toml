@@ -3,6 +3,10 @@ account_id = "3adb6783a9b30e9f7f2c36c3a3ba7bf9"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 
+routes = [
+  { pattern = "todolist.fullstackjam.com", custom_domain = true }
+]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "todolist-db"
